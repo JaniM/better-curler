@@ -25,7 +25,7 @@ def headers(context):
 
 # Calling `api` as a decorator registers the function as an available action.
 # The function name is used as the action name for the CLI.
-# The function signature is important, as it determines the parameter that
+# The function signature is important, as it determines the parameters that
 # can be passed to the function when it is called. The `client` and `context`
 # parameters are always available. The rest are determined by extra parameters
 # passed to the `API` constructor and CLI parameters.
@@ -33,16 +33,18 @@ def headers(context):
 # See `python examples/login.py login --help`
 @cli
 def login(client, context, base_url, token="123"):
+    # Pretemd we åerfprm a login.
     response = client.post(f"{base_url}/post", json={"access_token": token})
     response.raise_for_status()
     json = response.json()
+
+    # Store the returned access token in the context.
     context.access_token = json["json"]["access_token"]
     return json
 
 
 @cli
 def bearer(client, context, base_url):
-    print(f"{base_url}/bearer")
     response = client.get(f"{base_url}/bearer")
     response.raise_for_status()
     return response.json()
