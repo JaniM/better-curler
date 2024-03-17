@@ -7,7 +7,7 @@ import inspect
 
 Context = TypeVar("Context", bound=BaseModel)
 Endpoint = Callable[..., Any]
-HeaderFn = Callable[[Context], dict[str, str]]
+HeaderFn = Callable[..., dict[str, str]]
 
 
 def json_output(result: Any):
@@ -32,13 +32,14 @@ class CLI(Generic[Context]):
         self._kwargs = kwargs
         self._output_result = json_output
 
-    def perform(self, name: str, args: dict = {}) -> Any:
+    def perform(self, name: str, user_args: dict = {}) -> Any:
         endpoint = self._actions[name]
         assert endpoint is not None, "Endpoint not found."
 
         new_context = self.context()
-        client = httpx.Client(headers=self._make_headers())
+        client = httpx.Client(headers=self._make_headers(user_args))
 
+        args = user_args.copy()
         args["client"] = client
         args["context"] = new_context
 
@@ -48,9 +49,10 @@ class CLI(Generic[Context]):
         for name, param in signature.parameters.items():
             if param.default is not inspect.Parameter.empty:
                 arguments[name] = param.default
-
-        arguments.update(self._kwargs)
-        arguments.update(args)
+            if name in self._kwargs:
+                arguments[name] = self._kwargs[name]
+            if name in args:
+                arguments[name] = args[name]
 
         result = endpoint(**arguments)
 
@@ -58,11 +60,25 @@ class CLI(Generic[Context]):
             self._context = new_context
         return result
 
-    def _make_headers(self) -> dict[str, str]:
+    def _make_headers(self, user_args: dict) -> dict[str, str]:
         if self._header_fn is None:
             return {}
 
-        return self._header_fn(self.context())
+        args = user_args.copy()
+        args["context"] = self.context()
+
+        signature = inspect.signature(self._header_fn)
+
+        arguments = {}
+        for name, param in signature.parameters.items():
+            if param.default is not inspect.Parameter.empty:
+                arguments[name] = param.default
+            if name in self._kwargs:
+                arguments[name] = self._kwargs[name]
+            if name in args:
+                arguments[name] = args[name]
+
+        return self._header_fn(**arguments)
 
     def context(self) -> Context:
         return self._context.model_copy(deep=True)
@@ -95,11 +111,22 @@ class CLI(Generic[Context]):
         )
         subparsers = parser.add_subparsers(dest="action")
 
+        if self._header_fn is not None:
+            signature = inspect.signature(self._header_fn)
+            header_params = list(signature.parameters.items())
+        else:
+            header_params = []
+
         for name, endpoint in self._actions.items():
             subparser = subparsers.add_parser(name)
             signature = inspect.signature(endpoint)
 
-            for name, param in signature.parameters.items():
+            all_params = list(signature.parameters.items())
+            for name, param in header_params:
+                if name not in all_params:
+                    all_params.append((name, param))
+
+            for name, param in all_params:
                 if name in ["client", "context"]:
                     continue
 

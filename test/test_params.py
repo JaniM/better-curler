@@ -13,6 +13,10 @@ class Context(BaseModel):
 def api():
     api = CLI(Context())
 
+    @api.headers
+    def headers(context, header_param="default"):
+        return {"header": header_param}
+
     @api
     def has_required_param(client, context, required_param):
         return required_param
@@ -20,6 +24,10 @@ def api():
     @api
     def has_optional_param(client, context, optional_param="default"):
         return optional_param
+
+    @api
+    def returns_header(client, context):
+        return client.headers["header"]
 
     return api
 
@@ -42,3 +50,7 @@ def test_optional_param_missing(api):
 
 def test_optional_param_provided(api):
     assert api.run(["has_optional_param", "--optional-param", "value"]) == "value"
+
+
+def test_headers(api):
+    assert api.run(["returns_header", "--header-param", "value"]) == "value"
